@@ -15,7 +15,7 @@ const client = new Client({
 });
 
 const PREFIX = "!";
-const xpData = new Map(); // XP'leri geçici olarak tutar (Bot kapanınca sıfırlanır)
+const xpData = new Map();
 
 client.on('ready', () => {
     console.log(`✅ ${client.user.tag} IzaKaya'da göreve başladı!`);
@@ -28,68 +28,66 @@ client.on('messageCreate', async (message) => {
     let userXP = xpData.get(message.author.id) || 0;
     userXP += Math.floor(Math.random() * 5) + 5; 
     xpData.set(message.author.id, userXP);
-    if (userXP % 150 === 0) { // Her 150 XP'de bir tebrik eder
-        message.reply("🏮 **Omedetou!** Ruhun güçleniyor, IzaKaya'da saygınlığın arttı desu! ✨");
+    if (userXP === 100) { 
+        message.reply("🏮 **Omedetou!** Seviye atladın senpai! ✨");
     }
 
     if (!message.content.startsWith(PREFIX)) return;
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // --- 🏮 KURALLAR & IZAKAYA ---
-    if (command === "izakaya" || command === "kurallar") {
+    // --- 🎫 YENİ TICKET KOMUTU: !talep-oluştur ---
+    if (command === "talep-oluştur" || command === "destek-kur") {
+        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return message.reply("Bu parşömeni sadece Shogunlar açabilir! ❌");
+        }
+
         const embed = new EmbedBuilder()
-            .setTitle("🌸 IzaKaya'nın Kadim Kanunları")
-            .setDescription("Burası sadece bir mekan değil, bir aile ocağıdır senpai!")
-            .addFields(
-                { name: '🏮 Sessiz Fısıltı', value: 'Spam yapmak ruhları huzursuz eder.', inline: true },
-                { name: '🎎 Onur Kodu', value: 'Saygısızlık yapan samuray kapının önüne konur.', inline: true },
-                { name: '🍵 Çay Seremonisi', value: 'Herkesle barış içinde sohbet et desu!', inline: true }
-            )
+            .setTitle("🏮 IzaKaya Yardım Talebi")
+            .setDescription("Bir maruzatın mı var senpai? Aşağıdaki mühre basarak özel bir görüşme odası açabilirsin.")
             .setColor("#ffb7c5")
-            .setTimestamp();
-        return message.channel.send({ embeds: [embed] });
-    }
-
-    // --- 🎫 TICKET KUR (KESİN ÇÖZÜM) ---
-    if (command === "ticket-kur") {
-        if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
-
-        const ticketEmbed = new EmbedBuilder()
-            .setTitle("🏮 IzaKaya İşlem Odası")
-            .setDescription("Bir sorun mu var veya ekibe mi katılmak istiyorsun?\nAşağıdaki butona basarak özel oda açabilirsin!")
-            .setColor("#ffb7c5");
+            .setFooter({ text: "IzaKaya Güvenlik Sistemi" });
 
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('izakaya_ticket')
-                .setLabel('Destek Talebi Aç')
-                .setStyle(ButtonStyle.Primary)
+                .setLabel('Talep Aç')
+                .setStyle(ButtonStyle.Danger) // Daha dikkat çekici kırmızı buton
                 .setEmoji('🧧')
         );
 
-        await message.channel.send({ embeds: [ticketEmbed], components: [row] });
-        return message.delete().catch(() => {});
+        try {
+            await message.channel.send({ embeds: [embed], components: [row] });
+            await message.delete();
+        } catch (err) {
+            console.log("Mesaj gönderilemedi, yetkileri kontrol et kanka!");
+        }
     }
 
-    // --- 🧹 TEMİZLE ---
-    if (command === "temizle") {
-        if (!message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
-        const miktar = parseInt(args[0]) || 10;
-        await message.channel.bulkDelete(miktar, true);
-        message.channel.send(`✨ **${miktar}** mesaj süpürüldü!`).then(m => setTimeout(() => m.delete(), 3000));
+    // --- 🏮 DİĞER KOMUTLAR ---
+    if (command === "izakaya") {
+        message.channel.send("🏮 **IzaKaya**, samimiyetin ve animenin buluştuğu noktadır. Kurallar için **!kurallar** yazabilirsin desu!");
+    }
+
+    if (command === "kurallar") {
+        const ruleEmbed = new EmbedBuilder()
+            .setTitle("📜 Köy Kanunları")
+            .setDescription("1. Saygı esastır.\n2. Spam ruhu kirletir.\n3. Eğlenmek zorunludur! ✨")
+            .setColor("#ffb7c5");
+        message.channel.send({ embeds: [ruleEmbed] });
     }
 });
 
-// --- 🖱️ BUTON ETKİLEŞİMLERİ ---
+// --- 🖱️ ETKİLEŞİMLER ---
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
     if (interaction.customId === 'izakaya_ticket') {
+        // Kanal oluşturma
         try {
-            const channel = await interaction.guild.channels.create({
-                name: `🏮-${interaction.user.username}`,
-                type: 0, // Metin kanalı
+            const ticketChannel = await interaction.guild.channels.create({
+                name: `talep-${interaction.user.username}`,
+                type: 0,
                 permissionOverwrites: [
                     { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
                     { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
@@ -98,26 +96,26 @@ client.on('interactionCreate', async (interaction) => {
             });
 
             const welcome = new EmbedBuilder()
-                .setTitle("🏮 Hoş Geldin Senpai!")
-                .setDescription("Yetkililerimiz birazdan seninle ilgilenecek. Beklerken sakin ol desu! 🍵")
+                .setTitle("🌸 Özel Oda Hazır")
+                .setDescription(`Hoş geldin ${interaction.user}. Sorununu buraya yazabilirsin. Kapatmak için aşağıdaki butona bas.`)
                 .setColor("#ffb7c5");
 
-            const closeBtn = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('kapat').setLabel('Odayı Kapat').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+            const close = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('kapat').setLabel('Odayı Kapat').setStyle(ButtonStyle.Secondary)
             );
 
-            await channel.send({ content: `${interaction.user} | @everyone`, embeds: [welcome], components: [closeBtn] });
-            await interaction.reply({ content: `✅ Odan açıldı kanka: ${channel}`, ephemeral: true });
+            await ticketChannel.send({ embeds: [welcome], components: [close] });
+            await interaction.reply({ content: `✅ Kanalın açıldı: ${ticketChannel}`, ephemeral: true });
 
-        } catch (error) {
-            console.error(error);
-            await interaction.reply({ content: "❌ Oda oluşturulamadı! Botun 'Kanalları Yönet' yetkisi eksik.", ephemeral: true });
+        } catch (e) {
+            console.error(e);
+            await interaction.reply({ content: "❌ Oda açılamadı, yetkim yok!", ephemeral: true });
         }
     }
 
     if (interaction.customId === 'kapat') {
-        await interaction.reply("Bu oda 5 saniye içinde yok edilecek... Sayonara! 👋");
-        setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+        await interaction.reply("Oda mühürleniyor... 👋");
+        setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
     }
 });
 
